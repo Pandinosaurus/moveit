@@ -1,12 +1,6 @@
 cmake_minimum_required(VERSION 3.1.3)
 project(moveit_planners_chomp)
 
-if(NOT "${CMAKE_CXX_STANDARD}")
-  set(CMAKE_CXX_STANDARD 14)
-endif()
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-
 # find catkin in isolation so that CATKIN_ENABLE_TESTING is defined
 find_package(catkin REQUIRED)
 if (CATKIN_ENABLE_TESTING)
@@ -22,6 +16,7 @@ find_package(catkin REQUIRED COMPONENTS
   chomp_motion_planner
   ${CHOMP_TEST_DEPS}
 )
+moveit_build_options()
 
 find_package(Eigen3 REQUIRED)
 find_package(Boost REQUIRED)
@@ -63,10 +58,17 @@ install(TARGETS ${PROJECT_NAME} chomp_planner_plugin
 if(CATKIN_ENABLE_TESTING)
   # additional test dependencies
   find_package(rostest REQUIRED)
-  add_rostest_gtest(chomp_moveit_test
-    test/chomp_moveit.test
-    test/chomp_moveit_test.cpp)
-  target_link_libraries(chomp_moveit_test
+  add_rostest_gtest(chomp_moveit_test_rrbot
+    test/chomp_moveit_rrbot.test
+    test/chomp_moveit_test_rrbot.cpp)
+  target_link_libraries(chomp_moveit_test_rrbot
+    ${catkin_LIBRARIES}
+    ${rostest_LIBRARIES})
+
+  add_rostest_gtest(chomp_moveit_test_panda
+    test/chomp_moveit_panda.test
+    test/chomp_moveit_test_panda.cpp)
+  target_link_libraries(chomp_moveit_test_panda
     ${catkin_LIBRARIES}
     ${rostest_LIBRARIES})
 endif()

@@ -46,7 +46,7 @@
  * TODO(jeroendm) I also tried something similar with position constraints, but get a segmentation fault
  * that occurs in the 'geometric_shapes' package, in the method 'useDimensions' in 'bodies.h'.
  * git permalink:
- * https://github.com/ros-planning/geometric_shapes/blob/df0478870b8592ce789ee1919f3124058c4327d7/include/geometric_shapes/bodies.h#L196
+ * https://github.com/moveit/geometric_shapes/blob/df0478870b8592ce789ee1919f3124058c4327d7/include/geometric_shapes/bodies.h#L196
  *
  **/
 
@@ -54,7 +54,7 @@
 
 #include <gtest/gtest.h>
 
-#include <eigen_conversions/eigen_msg.h>
+#include <tf2_eigen/tf2_eigen.h>
 
 #include <moveit/ompl_interface/planning_context_manager.h>
 #include <moveit/planning_scene/planning_scene.h>
@@ -62,7 +62,6 @@
 #include <moveit/robot_state/conversions.h>
 #include <moveit/kinematic_constraints/utils.h>
 #include <moveit/constraint_samplers/constraint_sampler_manager.h>
-
 #include <moveit/ompl_interface/parameterization/joint_space/joint_model_state_space.h>
 
 /** \brief Generic implementation of the tests that can be executed on different robots. **/
@@ -129,8 +128,7 @@ public:
     // create path constraints around start state,  to make sure they are satisfied
     robot_state_->setJointGroupPositions(joint_model_group_, start);
     Eigen::Isometry3d ee_pose = robot_state_->getGlobalLinkTransform(ee_link_name_);
-    geometry_msgs::Quaternion ee_orientation;
-    tf::quaternionEigenToMsg(Eigen::Quaterniond(ee_pose.rotation()), ee_orientation);
+    geometry_msgs::Quaternion ee_orientation = tf2::toMsg(Eigen::Quaterniond(ee_pose.rotation()));
 
     // setup the planning context manager
     ompl_interface::PlanningContextManager pcm(robot_model_, constraint_sampler_manager_);

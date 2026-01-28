@@ -615,13 +615,17 @@ public:
   {
     const JointModelGroup* jmg = robot_model_->getJointModelGroup(joint_group_name);
     if (jmg)
+    {
+      assert(gstate.size() == jmg->getVariableCount());
       setJointGroupPositions(jmg, &gstate[0]);
+    }
   }
 
   /** \brief Given positions for the variables that make up a group, in the order found in the group (including values
    *   of mimic joints), set those as the new values that correspond to the group */
   void setJointGroupPositions(const JointModelGroup* group, const std::vector<double>& gstate)
   {
+    assert(gstate.size() == group->getVariableCount());
     setJointGroupPositions(group, &gstate[0]);
   }
 
@@ -635,12 +639,51 @@ public:
   {
     const JointModelGroup* jmg = robot_model_->getJointModelGroup(joint_group_name);
     if (jmg)
+    {
+      assert(values.size() == jmg->getVariableCount());
       setJointGroupPositions(jmg, values);
+    }
   }
 
   /** \brief Given positions for the variables that make up a group, in the order found in the group (including values
    *   of mimic joints), set those as the new values that correspond to the group */
   void setJointGroupPositions(const JointModelGroup* group, const Eigen::VectorXd& values);
+
+  /** \brief Given positions for the variables of active joints that make up a group,
+   * in the order found in the group (excluding values of mimic joints), set those
+   * as the new values that correspond to the group */
+  void setJointGroupActivePositions(const JointModelGroup* group, const std::vector<double>& gstate);
+
+  /** \brief Given positions for the variables of active joints that make up a group,
+   * in the order found in the group (excluding values of mimic joints), set those
+   * as the new values that correspond to the group */
+  void setJointGroupActivePositions(const std::string& joint_group_name, const std::vector<double>& gstate)
+  {
+    const JointModelGroup* jmg = robot_model_->getJointModelGroup(joint_group_name);
+    if (jmg)
+    {
+      assert(gstate.size() == jmg->getActiveVariableCount());
+      setJointGroupActivePositions(jmg, gstate);
+    }
+  }
+
+  /** \brief Given positions for the variables of active joints that make up a group,
+   * in the order found in the group (excluding values of mimic joints), set those
+   * as the new values that correspond to the group */
+  void setJointGroupActivePositions(const JointModelGroup* group, const Eigen::VectorXd& values);
+
+  /** \brief Given positions for the variables of active joints that make up a group,
+   * in the order found in the group (excluding values of mimic joints), set those
+   * as the new values that correspond to the group */
+  void setJointGroupActivePositions(const std::string& joint_group_name, const Eigen::VectorXd& values)
+  {
+    const JointModelGroup* jmg = robot_model_->getJointModelGroup(joint_group_name);
+    if (jmg)
+    {
+      assert(values.size() == jmg->getActiveVariableCount());
+      setJointGroupActivePositions(jmg, values);
+    }
+  }
 
   /** \brief For a given group, copy the position values of the variables that make up the group into another location,
    * in the order that the variables are found in the group. This is not necessarily a contiguous block of memory in the
@@ -900,22 +943,6 @@ public:
    *  @{
    */
 
-  /**
-   * \brief Convert the frame of reference of the pose to that same frame as the IK solver expects
-   * @param pose - the input to change
-   * @param solver - a kin solver whose base frame is important to us
-   * @return true if no error
-   */
-  bool setToIKSolverFrame(Eigen::Isometry3d& pose, const kinematics::KinematicsBaseConstPtr& solver);
-
-  /**
-   * \brief Convert the frame of reference of the pose to that same frame as the IK solver expects
-   * @param pose - the input to change
-   * @param ik_frame - the name of frame of reference of base of ik solver
-   * @return true if no error
-   */
-  bool setToIKSolverFrame(Eigen::Isometry3d& pose, const std::string& ik_frame);
-
   /** \brief If the group this state corresponds to is a chain and a solver is available, then the joint values can be
      set by computing inverse kinematics.
       The pose is assumed to be in the reference frame of the kinematic model. Returns true on success.
@@ -1041,12 +1068,12 @@ public:
       @param timeout The timeout passed to the kinematics solver on each attempt
       @param constraint A state validity constraint to be required for IK solutions */
   bool setFromIK(const JointModelGroup* group, const EigenSTL::vector_Isometry3d& poses,
-                 const std::vector<std::string>& tips, const std::vector<std::vector<double> >& consistency_limits,
+                 const std::vector<std::string>& tips, const std::vector<std::vector<double>>& consistency_limits,
                  double timeout = 0.0, const GroupStateValidityCallbackFn& constraint = GroupStateValidityCallbackFn(),
                  const kinematics::KinematicsQueryOptions& options = kinematics::KinematicsQueryOptions());
   [[deprecated("The attempts argument is not supported anymore.")]] bool
   setFromIK(const JointModelGroup* group, const EigenSTL::vector_Isometry3d& poses,
-            const std::vector<std::string>& tips, const std::vector<std::vector<double> >& consistency_limits,
+            const std::vector<std::string>& tips, const std::vector<std::vector<double>>& consistency_limits,
             unsigned int /* attempts */, double timeout = 0.0,
             const GroupStateValidityCallbackFn& constraint = GroupStateValidityCallbackFn(),
             const kinematics::KinematicsQueryOptions& options = kinematics::KinematicsQueryOptions())
@@ -1064,12 +1091,12 @@ public:
       @param constraint A state validity constraint to be required for IK solutions */
   bool setFromIKSubgroups(const JointModelGroup* group, const EigenSTL::vector_Isometry3d& poses,
                           const std::vector<std::string>& tips,
-                          const std::vector<std::vector<double> >& consistency_limits, double timeout = 0.0,
+                          const std::vector<std::vector<double>>& consistency_limits, double timeout = 0.0,
                           const GroupStateValidityCallbackFn& constraint = GroupStateValidityCallbackFn(),
                           const kinematics::KinematicsQueryOptions& options = kinematics::KinematicsQueryOptions());
   [[deprecated("The attempts argument is not supported anymore.")]] bool
   setFromIKSubgroups(const JointModelGroup* group, const EigenSTL::vector_Isometry3d& poses,
-                     const std::vector<std::string>& tips, const std::vector<std::vector<double> >& consistency_limits,
+                     const std::vector<std::string>& tips, const std::vector<std::vector<double>>& consistency_limits,
                      unsigned int /* attempts */, double timeout = 0.0,
                      const GroupStateValidityCallbackFn& constraint = GroupStateValidityCallbackFn(),
                      const kinematics::KinematicsQueryOptions& options = kinematics::KinematicsQueryOptions())
@@ -1082,7 +1109,6 @@ public:
    * @param twist a Cartesian velocity on the 'tip' frame
    * @param tip the frame for which the twist is given
    * @param dt a time interval (seconds)
-   * @param st a secondary task computation function
    */
   bool setFromDiffIK(const JointModelGroup* group, const Eigen::VectorXd& twist, const std::string& tip, double dt,
                      const GroupStateValidityCallbackFn& constraint = GroupStateValidityCallbackFn());
@@ -1092,82 +1118,9 @@ public:
    * @param twist a Cartesian velocity on the 'tip' frame
    * @param tip the frame for which the twist is given
    * @param dt a time interval (seconds)
-   * @param st a secondary task computation function
    */
   bool setFromDiffIK(const JointModelGroup* group, const geometry_msgs::Twist& twist, const std::string& tip, double dt,
                      const GroupStateValidityCallbackFn& constraint = GroupStateValidityCallbackFn());
-
-  /** \brief Compute the sequence of joint values that correspond to a straight Cartesian path for a particular group.
-
-     The Cartesian path to be followed is specified as a direction of motion (\e direction, unit vector) for the origin
-     The Cartesian path to be followed is specified as a direction of motion (\e direction, unit vector) for the origin
-     of a robot link (\e link). The direction is assumed to be either in a global reference frame or in the local
-     reference frame of the link. In the latter case (\e global_reference_frame is false) the \e direction is rotated
-     accordingly. The link needs to move in a straight line, following the specified direction, for the desired \e
-     distance. The resulting joint values are stored in the vector \e traj, one by one. The maximum distance in
-     Cartesian space between consecutive points on the resulting path is specified in the \e MaxEEFStep struct which
-     provides two fields: translation and rotation. If a \e validCallback is specified, this is passed to the internal
-     call to setFromIK(). In case of IK failure, the computation of the path stops and the value returned corresponds to
-     the distance that was computed and for which corresponding states were added to the path.  At the end of the
-     function call, the state of the group corresponds to the last attempted Cartesian pose.
-
-     During the computation of the trajectory, it is usually preferred if consecutive joint values do not 'jump' by a
-     large amount in joint space, even if the Cartesian distance between the corresponding points is small as expected.
-     To account for this, the \e jump_threshold struct is provided, which comprises three fields:
-     \e jump_threshold_factor, \e revolute_jump_threshold and \e prismatic_jump_threshold.
-     If either \e revolute_jump_threshold or \e prismatic_jump_threshold  are non-zero, we test for absolute jumps.
-     If \e jump_threshold_factor is non-zero, we test for relative jumps. Otherwise (all params are zero), jump
-     detection is disabled.
-
-     For relative jump detection, the average joint-space distance between consecutive points in the trajectory is
-     computed. If any individual joint-space motion delta is larger then this average distance by a factor of
-     \e jump_threshold_factor, this step is considered a failure and the returned path is truncated up to just
-     before the jump.
-
-     For absolute jump thresholds, if any individual joint-space motion delta is larger then \e revolute_jump_threshold
-     for revolute joints or \e prismatic_jump_threshold for prismatic joints then this step is considered a failure and
-     the returned path is truncated up to just before the jump.
-
-     NOTE: As of ROS-Melodic these are deprecated and should not be used
-     */
-  [[deprecated]] double
-  computeCartesianPath(const JointModelGroup* group, std::vector<RobotStatePtr>& traj, const LinkModel* link,
-                       const Eigen::Vector3d& direction, bool global_reference_frame, double distance, double max_step,
-                       double jump_threshold_factor,
-                       const GroupStateValidityCallbackFn& validCallback = GroupStateValidityCallbackFn(),
-                       const kinematics::KinematicsQueryOptions& options = kinematics::KinematicsQueryOptions());
-
-  /** \brief Compute the sequence of joint values that correspond to a straight Cartesian path, for a particular group.
-
-     In contrast to the previous function, the Cartesian path is specified as a target frame to be reached (\e target)
-     for the origin of a robot link (\e link). The target frame is assumed to be either in a global reference frame or
-     in the local reference frame of the link. In the latter case (\e global_reference_frame is false) the \e target is
-     rotated accordingly. All other comments from the previous function apply.
-
-     NOTE: As of ROS-Melodic these are deprecated and should not be used
-     */
-  [[deprecated]] double
-  computeCartesianPath(const JointModelGroup* group, std::vector<RobotStatePtr>& traj, const LinkModel* link,
-                       const Eigen::Isometry3d& target, bool global_reference_frame, double max_step,
-                       double jump_threshold_factor,
-                       const GroupStateValidityCallbackFn& validCallback = GroupStateValidityCallbackFn(),
-                       const kinematics::KinematicsQueryOptions& options = kinematics::KinematicsQueryOptions());
-
-  /** \brief Compute the sequence of joint values that perform a general Cartesian path.
-
-     In contrast to the previous functions, the Cartesian path is specified as a set of \e waypoints to be sequentially
-     reached for the origin of a robot link (\e link). The waypoints are transforms given either in a global reference
-     frame or in the local reference frame of the link at the immediately preceeding waypoint. The link needs to move
-     in a straight line between two consecutive waypoints. All other comments apply.
-
-     NOTE: As of ROS-Melodic these are deprecated and should not be used
-     */
-  [[deprecated]] double
-  computeCartesianPath(const JointModelGroup* group, std::vector<RobotStatePtr>& traj, const LinkModel* link,
-                       const EigenSTL::vector_Isometry3d& waypoints, bool global_reference_frame, double max_step,
-                       double jump_threshold_factor,
-                       const GroupStateValidityCallbackFn& validCallback = GroupStateValidityCallbackFn(),
-                       const kinematics::KinematicsQueryOptions& options = kinematics::KinematicsQueryOptions());
 
   /** \brief Compute the Jacobian with reference to a particular point on a given link, for a specified group.
    * \param group The group to compute the Jacobian for
@@ -1220,6 +1173,35 @@ public:
     return static_cast<const RobotState*>(this)->getJacobian(group, reference_point_position);
   }
 
+  /** \brief Compute the time derivative of the Jacobian with reference to a particular point on a given link, for a
+   * specified group.
+   *
+   * Based on KDL's ChainJntToJacDotSolver implementation and:
+   * Symbolic differentiation of the velocity mapping for a serial kinematic chain
+   * H. Bruyninckx, J. De Schutter
+   * doi:10.1016/0094-114X(95)00069-B
+   * url : http://www.sciencedirect.com/science/article/pii/0094114X9500069B
+   *
+   * \param group The group to compute the Jacobian time derivative for
+   * \param link The link model to compute the Jacobian time derivative for
+   * \param reference_point_position The reference point position (with respect to the link specified in link)
+   * \param jacobian The resultant jacobian
+   * \param jacobian_derivative The resultant jacobian time derivative
+   * \return True if jacobian time derivative was successfully computed, false otherwise
+   */
+  bool getJacobianDerivative(const JointModelGroup* group, const LinkModel* link,
+                             const Eigen::Vector3d& reference_point_position, Eigen::MatrixXd& jacobian,
+                             Eigen::MatrixXd& jacobian_derivative) const;
+
+  /** \brief Compute the partial derivative of a column of the Jacobian wrt a single joint.
+   * \param jacobian The Jacobian matrix
+   * \param column_index Column of the Jacobian to compute the partial derivative for
+   * \param joint_index Joint index to compute the partial derivative with respect to
+   * \return Partial derivative of a Jacobian column wrt a single joint
+   */
+  static Eigen::Matrix<double, 6, 1> getJacobianColumnPartialDerivative(const Eigen::MatrixXd& jacobian,
+                                                                        int column_index, int joint_index);
+
   /** \brief Given a twist for a particular link (\e tip), compute the corresponding velocity for every variable and
    * store it in \e qdot */
   void computeVariableVelocity(const JointModelGroup* jmg, Eigen::VectorXd& qdot, const Eigen::VectorXd& twist,
@@ -1262,8 +1244,21 @@ public:
   /** \brief Set the joints in \e group to the position \e name defined in the SRDF */
   bool setToDefaultValues(const JointModelGroup* group, const std::string& name);
 
+  bool setToDefaultValues(const std::string& group_name, const std::string& state_name)
+  {
+    const JointModelGroup* jmg = getJointModelGroup(group_name);
+    if (jmg)
+      return setToDefaultValues(jmg, state_name);
+    else
+      return false;
+  }
+
   /** \brief Set all joints to random values.  Values will be within default bounds. */
   void setToRandomPositions();
+
+  /** \brief Set all joints to random values using the specified random number generator.
+      Values will be within default bounds. */
+  void setToRandomPositions(random_numbers::RandomNumberGenerator& rng);
 
   /** \brief Set all joints in \e group to random values.  Values will be within default bounds. */
   void setToRandomPositions(const JointModelGroup* group);
@@ -1272,22 +1267,40 @@ public:
       Values will be within default bounds. */
   void setToRandomPositions(const JointModelGroup* group, random_numbers::RandomNumberGenerator& rng);
 
-  /** \brief Set all joints in \e group to random values near the value in \near.
+  /** \brief Set all joints in \e group to random values near the value in \e seed.
    *  \e distance is the maximum amount each joint value will vary from the
-   *  corresponding value in \e near.  \distance represents meters for
+   *  corresponding value in \e seed.  \e distance represents meters for
    *  prismatic/postitional joints and radians for revolute/orientation joints.
    *  Resulting values are clamped within default bounds. */
-  void setToRandomPositionsNearBy(const JointModelGroup* group, const RobotState& near, double distance);
+  void setToRandomPositionsNearBy(const JointModelGroup* group, const RobotState& seed, double distance);
 
-  /** \brief Set all joints in \e group to random values near the value in \near.
+  /** \brief Set all joints in \e group to random values near the value in \e seed, using a specified random number generator.
+   *  \e distance is the maximum amount each joint value will vary from the
+   *  corresponding value in \e seed.  \e distance represents meters for
+   *  prismatic/postitional joints and radians for revolute/orientation joints.
+   *  Resulting values are clamped within default bounds. */
+  void setToRandomPositionsNearBy(const JointModelGroup* group, const RobotState& seed, double distance,
+                                  random_numbers::RandomNumberGenerator& rng);
+
+  /** \brief Set all joints in \e group to random values near the value in \e seed.
    *  \e distances \b MUST have the same size as \c
    *  group.getActiveJointModels().  Each value in \e distances is the maximum
    *  amount the corresponding active joint in \e group will vary from the
-   *  corresponding value in \e near.  \distance represents meters for
+   *  corresponding value in \e seed.  \e distance represents meters for
    *  prismatic/postitional joints and radians for revolute/orientation joints.
    *  Resulting values are clamped within default bounds. */
-  void setToRandomPositionsNearBy(const JointModelGroup* group, const RobotState& near,
+  void setToRandomPositionsNearBy(const JointModelGroup* group, const RobotState& seed,
                                   const std::vector<double>& distances);
+
+  /** \brief Set all joints in \e group to random values near the value in \e seed, using a specified random number generator.
+   *  \e distances \b MUST have the same size as \c
+   *  group.getActiveJointModels().  Each value in \e distances is the maximum
+   *  amount the corresponding active joint in \e group will vary from the
+   *  corresponding value in \e seed.  \e distance represents meters for
+   *  prismatic/postitional joints and radians for revolute/orientation joints.
+   *  Resulting values are clamped within default bounds. */
+  void setToRandomPositionsNearBy(const JointModelGroup* group, const RobotState& seed,
+                                  const std::vector<double>& distances, random_numbers::RandomNumberGenerator& rng);
 
   /** @} */
 
@@ -1321,6 +1334,17 @@ public:
 
   /** \brief Update the state after setting a particular link to the input global transform pose.*/
   void updateStateWithLinkAt(const LinkModel* link, const Eigen::Isometry3d& transform, bool backward = false);
+
+  /** \brief Get the latest link upwards the kinematic tree which is only connected via fixed joints.
+   *
+   * This behaves the same as RobotModel::getRigidlyConnectedParentLinkModel,
+   * but can additionally resolve parents for attached objects / subframes.
+   *
+   * If transform is specified, return the (fixed) relative transform from the returned parent link to frame.
+   */
+  const moveit::core::LinkModel*
+  getRigidlyConnectedParentLinkModel(const std::string& frame, Eigen::Isometry3d* transform = nullptr,
+                                     const moveit::core::JointModelGroup* jmg = nullptr) const;
 
   /** \brief Get the link transform w.r.t. the root link (model frame) of the RobotModel.
    *   This is typically the root link of the URDF unless a virtual joint is present.
@@ -1439,32 +1463,52 @@ public:
    *  @{
    */
 
+  /** \brief Return the sum of joint distances to "other" state. Only considers active joints. */
   double distance(const RobotState& other) const
   {
     return robot_model_->distance(position_, other.getVariablePositions());
   }
 
+  /** \brief Return the sum of joint distances to "other" state. Only considers active joints. */
   double distance(const RobotState& other, const JointModelGroup* joint_group) const;
 
+  /** \brief Return the sum of joint distances to "other" state. Only considers active joints. */
   double distance(const RobotState& other, const JointModel* joint) const
   {
     const int idx = joint->getFirstVariableIndex();
     return joint->distance(position_ + idx, other.position_ + idx);
   }
 
-  /** \brief Interpolate from this state towards state \e to, at time \e t in [0,1].
-      The result is stored in \e state, mimic joints are correctly updated and flags are set
-      so that FK is recomputed when needed. */
+  /**
+   * Interpolate towards "to" state. Mimic joints are correctly updated and flags are set so that FK is recomputed
+   * when needed.
+   *
+   * @param to interpolate to this state
+   * @param t a fraction in the range [0 1]. If 1, the result matches "to" state exactly.
+   * @param state holds the result
+   */
   void interpolate(const RobotState& to, double t, RobotState& state) const;
 
-  /** \brief Interpolate from this state towards \e to, at time \e t in [0,1], but only for the joints in the
-      specified group. If mimic joints need to be updated, they are updated accordingly. Flags are set so that FK
-      computation is triggered when needed. */
+  /**
+   * Interpolate towards "to" state, but only for the joints in the specified group. Mimic joints are correctly updated
+   * and flags are set so that FK is recomputed when needed.
+   *
+   * @param to interpolate to this state
+   * @param t a fraction in the range [0 1]. If 1, the result matches "to" state exactly.
+   * @param state holds the result
+   * @param joint_group interpolate only for the joints in this group
+   */
   void interpolate(const RobotState& to, double t, RobotState& state, const JointModelGroup* joint_group) const;
 
-  /** \brief Update \e state by interpolating form this state towards \e to, at time \e t in [0,1] but only for
-      the joint \e joint. If there are joints that mimic this joint, they are updated. Flags are set so that
-      FK computation is triggered as needed. */
+  /**
+   * Interpolate towards "to" state, but only for a single joint. Mimic joints are correctly updated
+   * and flags are set so that FK is recomputed when needed.
+   *
+   * @param to interpolate to this state
+   * @param t a fraction in the range [0 1]. If 1, the result matches "to" state exactly.
+   * @param state holds the result
+   * @param joint interpolate only for this joint
+   */
   void interpolate(const RobotState& to, double t, RobotState& state, const JointModel* joint) const
   {
     const int idx = joint->getFirstVariableIndex();
@@ -1547,6 +1591,18 @@ public:
    *  @{
    */
 
+  /** \brief Add an attached body to this state.
+   *
+   * This only adds the given body to this RobotState
+   * instance.  It does not change anything about other
+   * representations of the object elsewhere in the system.  So if the
+   * body represents an object in a collision_detection::World (like
+   * from a planning_scene::PlanningScene), you will likely need to remove the
+   * corresponding object from that world to avoid having collisions
+   * detected against it.
+   **/
+  void attachBody(std::unique_ptr<AttachedBody> attached_body);
+
   /** \brief Add an attached body to this state. Ownership of the
    * memory for the attached body is assumed by the state.
    *
@@ -1566,12 +1622,13 @@ public:
    * the body positions will get corrupted.  You need to make a fresh
    * copy of the AttachedBody object for each RobotState you attach it
    * to.*/
-  void attachBody(AttachedBody* attached_body);
+  [[deprecated("Deprecated. Pass a unique_ptr instead")]] void attachBody(AttachedBody* attached_body);
 
   /** @brief Add an attached body to a link
    * @param id The string id associated with the attached body
+   * @param pose The pose associated with the attached body
    * @param shapes The shapes that make up the attached body
-   * @param attach_trans The desired transform between this link and the attached body
+   * @param shape_poses The transforms between the object pose and the attached body's shapes
    * @param touch_links The set of links that the attached body is allowed to touch
    * @param link_name The link to attach to
    * @param detach_posture The posture of the gripper when placing the object
@@ -1584,16 +1641,17 @@ public:
    * from a planning_scene::PlanningScene), you will likely need to remove the
    * corresponding object from that world to avoid having collisions
    * detected against it. */
-  void attachBody(const std::string& id, const std::vector<shapes::ShapeConstPtr>& shapes,
-                  const EigenSTL::vector_Isometry3d& shape_poses, const std::set<std::string>& touch_links,
-                  const std::string& link_name,
+  void attachBody(const std::string& id, const Eigen::Isometry3d& pose,
+                  const std::vector<shapes::ShapeConstPtr>& shapes, const EigenSTL::vector_Isometry3d& shape_poses,
+                  const std::set<std::string>& touch_links, const std::string& link_name,
                   const trajectory_msgs::JointTrajectory& detach_posture = trajectory_msgs::JointTrajectory(),
                   const moveit::core::FixedTransformsMap& subframe_poses = moveit::core::FixedTransformsMap());
 
   /** @brief Add an attached body to a link
    * @param id The string id associated with the attached body
+   * @param pose The pose associated with the attached body
    * @param shapes The shapes that make up the attached body
-   * @param attach_trans The desired transform between this link and the attached body
+   * @param shape_poses The transforms between the object pose and the attached body's shapes
    * @param touch_links The set of links that the attached body is allowed to touch
    * @param link_name The link to attach to
    * @param detach_posture The posture of the gripper when placing the object
@@ -1606,14 +1664,14 @@ public:
    * from a planning_scene::PlanningScene), you will likely need to remove the
    * corresponding object from that world to avoid having collisions
    * detected against it. */
-  void attachBody(const std::string& id, const std::vector<shapes::ShapeConstPtr>& shapes,
-                  const EigenSTL::vector_Isometry3d& shape_poses, const std::vector<std::string>& touch_links,
-                  const std::string& link_name,
+  void attachBody(const std::string& id, const Eigen::Isometry3d& pose,
+                  const std::vector<shapes::ShapeConstPtr>& shapes, const EigenSTL::vector_Isometry3d& shape_poses,
+                  const std::vector<std::string>& touch_links, const std::string& link_name,
                   const trajectory_msgs::JointTrajectory& detach_posture = trajectory_msgs::JointTrajectory(),
                   const moveit::core::FixedTransformsMap& subframe_poses = moveit::core::FixedTransformsMap())
   {
     std::set<std::string> touch_links_set(touch_links.begin(), touch_links.end());
-    attachBody(id, shapes, shape_poses, touch_links_set, link_name, detach_posture, subframe_poses);
+    attachBody(id, pose, shapes, shape_poses, touch_links_set, link_name, detach_posture, subframe_poses);
   }
 
   /** \brief Get all bodies attached to the model corresponding to this state */
@@ -1750,7 +1808,23 @@ public:
 
   void printDirtyInfo(std::ostream& out = std::cout) const;
 
-  std::string getStateTreeString(const std::string& prefix = "") const;
+  std::string getStateTreeString() const;
+
+  /**
+   * \brief Transform pose from the robot model's base frame to the reference frame of the IK solver
+   * @param pose - the input to change
+   * @param solver - a kin solver whose base frame is important to us
+   * @return true if no error
+   */
+  bool setToIKSolverFrame(Eigen::Isometry3d& pose, const kinematics::KinematicsBaseConstPtr& solver);
+
+  /**
+   * \brief Transform pose from the robot model's base frame to the reference frame of the IK solver
+   * @param pose - the input to change
+   * @param ik_frame - the name of frame of reference of base of ik solver
+   * @return true if no error
+   */
+  bool setToIKSolverFrame(Eigen::Isometry3d& pose, const std::string& ik_frame);
 
 private:
   void allocMemory();
@@ -1852,7 +1926,7 @@ private:
   unsigned char* dirty_joint_transforms_;
 
   /** \brief All attached bodies that are part of this state, indexed by their name */
-  std::map<std::string, AttachedBody*> attached_body_map_;
+  std::map<std::string, std::unique_ptr<AttachedBody>> attached_body_map_;
 
   /** \brief This event is called when there is a change in the attached bodies for this state;
       The event specifies the body that changed and whether it was just attached or about to be detached. */
@@ -1865,6 +1939,9 @@ private:
       getRandomNumberGenerator() instead. */
   random_numbers::RandomNumberGenerator* rng_;
 };
+
+/** Check that both RobotStates have the same set of attached objects */
+bool haveSameAttachedObjects(const RobotState& left, const RobotState& right, const std::string& logprefix = "");
 
 /** \brief Operator overload for printing variable bounds to a stream */
 std::ostream& operator<<(std::ostream& out, const RobotState& s);

@@ -59,7 +59,9 @@ protected:
 
 protected:
   ros::NodeHandle ph_{ "~" };
-  robot_model::RobotModelConstPtr robot_model_{ robot_model_loader::RobotModelLoader(ROBOT_DESCRIPTION_STR).getModel() };
+  robot_model_loader::RobotModelLoader robot_model_loader_{ ROBOT_DESCRIPTION_STR };
+  robot_model::RobotModelConstPtr robot_model_{ robot_model_loader_.getModel() };
+  planning_scene::PlanningSceneConstPtr planning_scene_{ new planning_scene::PlanningScene(robot_model_) };
 
   std::string planning_group_;
 };
@@ -103,7 +105,7 @@ TEST_F(IntegrationTestPlanComponentBuilder, TestModelSet)
   robot_trajectory::RobotTrajectoryPtr traj{ new robot_trajectory::RobotTrajectory(robot_model_, planning_group_) };
   PlanComponentsBuilder builder;
 
-  EXPECT_THROW(builder.append(traj, 1.0), NoRobotModelSetException);
+  EXPECT_THROW(builder.append(planning_scene_, traj, 1.0), NoRobotModelSetException);
 }
 
 /**
@@ -116,9 +118,9 @@ TEST_F(IntegrationTestPlanComponentBuilder, TestNoBlenderSet)
   PlanComponentsBuilder builder;
   builder.setModel(robot_model_);
 
-  builder.append(traj, 0.0);
+  builder.append(planning_scene_, traj, 0.0);
 
-  EXPECT_THROW(builder.append(traj, 1.0), NoBlenderSetException);
+  EXPECT_THROW(builder.append(planning_scene_, traj, 1.0), NoBlenderSetException);
 }
 
 int main(int argc, char** argv)

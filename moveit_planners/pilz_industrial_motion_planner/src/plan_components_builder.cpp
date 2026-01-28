@@ -54,11 +54,15 @@ std::vector<robot_trajectory::RobotTrajectoryPtr> PlanComponentsBuilder::build()
 void PlanComponentsBuilder::appendWithStrictTimeIncrease(robot_trajectory::RobotTrajectory& result,
                                                          const robot_trajectory::RobotTrajectory& source)
 {
-  if (result.empty() ||
-      !pilz_industrial_motion_planner::isRobotStateEqual(result.getLastWayPoint(), source.getFirstWayPoint(),
-                                                         result.getGroupName(), ROBOT_STATE_EQUALITY_EPSILON))
+  if (result.empty())
   {
     result.append(source, 0.0);
+    return;
+  }
+  if (!pilz_industrial_motion_planner::isRobotStateEqual(result.getLastWayPoint(), source.getFirstWayPoint(),
+                                                         result.getGroupName(), ROBOT_STATE_EQUALITY_EPSILON))
+  {
+    result.append(source, source.getWayPointDurationFromStart(0));
     return;
   }
 
@@ -68,7 +72,8 @@ void PlanComponentsBuilder::appendWithStrictTimeIncrease(robot_trajectory::Robot
   }
 }
 
-void PlanComponentsBuilder::blend(const robot_trajectory::RobotTrajectoryPtr& other, const double blend_radius)
+void PlanComponentsBuilder::blend(const planning_scene::PlanningSceneConstPtr& planning_scene,
+                                  const robot_trajectory::RobotTrajectoryPtr& other, const double blend_radius)
 {
   if (!blender_)
   {
@@ -86,19 +91,21 @@ void PlanComponentsBuilder::blend(const robot_trajectory::RobotTrajectoryPtr& ot
   blend_request.link_name = getSolverTipFrame(model_->getJointModelGroup(blend_request.group_name));
 
   pilz_industrial_motion_planner::TrajectoryBlendResponse blend_response;
-  if (!blender_->blend(blend_request, blend_response))
+  if (!blender_->blend(planning_scene, blend_request, blend_response))
   {
     throw BlendingFailedException("Blending failed");
   }
 
   // Append the new trajectory elements
   appendWithStrictTimeIncrease(*(traj_cont_.back()), *blend_response.first_trajectory);
-  traj_cont_.back()->append(*blend_response.blend_trajectory, 0.0);
+  appendWithStrictTimeIncrease(*(traj_cont_.back()), *blend_response.blend_trajectory);
+
   // Store the last new trajectory element for future processing
   traj_tail_ = blend_response.second_trajectory;  // first for next blending segment
 }
 
-void PlanComponentsBuilder::append(const robot_trajectory::RobotTrajectoryPtr& other, const double blend_radius)
+void PlanComponentsBuilder::append(const planning_scene::PlanningSceneConstPtr& planning_scene,
+                                   const robot_trajectory::RobotTrajectoryPtr& other, const double blend_radius)
 {
   if (!model_)
   {
@@ -131,7 +138,7 @@ void PlanComponentsBuilder::append(const robot_trajectory::RobotTrajectoryPtr& o
     return;
   }
 
-  blend(other, blend_radius);
+  blend(planning_scene, other, blend_radius);
 }
 
 }  // namespace pilz_industrial_motion_planner
