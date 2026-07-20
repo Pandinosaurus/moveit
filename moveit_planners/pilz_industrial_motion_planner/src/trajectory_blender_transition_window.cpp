@@ -35,10 +35,13 @@
 #include "pilz_industrial_motion_planner/trajectory_blender_transition_window.h"
 
 #include <algorithm>
+#include <memory>
 #include <math.h>
 #include <tf2_eigen/tf2_eigen.h>
+#include <moveit/planning_interface/planning_interface.h>
 
 bool pilz_industrial_motion_planner::TrajectoryBlenderTransitionWindow::blend(
+    const planning_scene::PlanningSceneConstPtr& planning_scene,
     const pilz_industrial_motion_planner::TrajectoryBlendRequest& req,
     pilz_industrial_motion_planner::TrajectoryBlendResponse& res)
 {
@@ -58,7 +61,7 @@ bool pilz_industrial_motion_planner::TrajectoryBlenderTransitionWindow::blend(
   std::size_t second_intersection_index;
   if (!searchIntersectionPoints(req, first_intersection_index, second_intersection_index))
   {
-    ROS_ERROR("Blend radius to large.");
+    ROS_ERROR("Blend radius too large.");
     res.error_code.val = moveit_msgs::MoveItErrorCodes::INVALID_MOTION_PLAN;
     return false;
   }
@@ -85,10 +88,10 @@ bool pilz_industrial_motion_planner::TrajectoryBlenderTransitionWindow::blend(
   }
   trajectory_msgs::JointTrajectory blend_joint_trajectory;
   moveit_msgs::MoveItErrorCodes error_code;
-  if (!generateJointTrajectory(req.first_trajectory->getFirstWayPointPtr()->getRobotModel(),
-                               limits_.getJointLimitContainer(), blend_trajectory_cartesian, req.group_name,
-                               req.link_name, initial_joint_position, initial_joint_velocity, blend_joint_trajectory,
-                               error_code, true))
+
+  if (!generateJointTrajectory(planning_scene, limits_.getJointLimitContainer(), blend_trajectory_cartesian,
+                               req.group_name, req.link_name, Eigen::Translation3d::Identity(), initial_joint_position,
+                               initial_joint_velocity, blend_joint_trajectory, error_code))
   {
     // LCOV_EXCL_START
     ROS_INFO("Failed to generate joint trajectory for blending trajectory.");
@@ -97,12 +100,12 @@ bool pilz_industrial_motion_planner::TrajectoryBlenderTransitionWindow::blend(
     // LCOV_EXCL_STOP
   }
 
-  res.first_trajectory = std::shared_ptr<robot_trajectory::RobotTrajectory>(
-      new robot_trajectory::RobotTrajectory(req.first_trajectory->getRobotModel(), req.first_trajectory->getGroup()));
-  res.blend_trajectory = std::shared_ptr<robot_trajectory::RobotTrajectory>(
-      new robot_trajectory::RobotTrajectory(req.first_trajectory->getRobotModel(), req.first_trajectory->getGroup()));
-  res.second_trajectory = std::shared_ptr<robot_trajectory::RobotTrajectory>(
-      new robot_trajectory::RobotTrajectory(req.first_trajectory->getRobotModel(), req.first_trajectory->getGroup()));
+  res.first_trajectory = std::make_shared<robot_trajectory::RobotTrajectory>(req.first_trajectory->getRobotModel(),
+                                                                             req.first_trajectory->getGroup());
+  res.blend_trajectory = std::make_shared<robot_trajectory::RobotTrajectory>(req.first_trajectory->getRobotModel(),
+                                                                             req.first_trajectory->getGroup());
+  res.second_trajectory = std::make_shared<robot_trajectory::RobotTrajectory>(req.first_trajectory->getRobotModel(),
+                                                                              req.first_trajectory->getGroup());
 
   // set the three trajectories after blending in response
   // erase the points [first_intersection_index, back()] from the first
@@ -115,6 +118,7 @@ bool pilz_industrial_motion_planner::TrajectoryBlenderTransitionWindow::blend(
 
   // append the blend trajectory
   res.blend_trajectory->setRobotTrajectoryMsg(req.first_trajectory->getFirstWayPoint(), blend_joint_trajectory);
+
   // copy the points [second_intersection_index, len] from the second trajectory
   for (size_t i = second_intersection_index + 1; i < req.second_trajectory->getWayPointCount(); ++i)
   {
@@ -164,7 +168,8 @@ bool pilz_industrial_motion_planner::TrajectoryBlenderTransitionWindow::validate
   if (!pilz_industrial_motion_planner::isRobotStateEqual(
           req.first_trajectory->getLastWayPoint(), req.second_trajectory->getFirstWayPoint(), req.group_name, EPSILON))
   {
-    ROS_ERROR_STREAM("During blending the last point of the preceding and the first point of the succeding trajectory");
+    ROS_ERROR_STREAM(
+        "During blending the last point of the preceding and the first point of the succeding trajectory differ");
     error_code.val = moveit_msgs::MoveItErrorCodes::INVALID_MOTION_PLAN;
     return false;
   }

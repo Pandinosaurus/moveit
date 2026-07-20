@@ -354,12 +354,14 @@ void ServoCalcs::calculateSingleIteration()
     *joint_trajectory = *last_sent_command_;
     for (auto& point : joint_trajectory->points)
     {
+      current_state_->copyJointGroupPositions(joint_model_group_, point.positions);
       point.velocities.assign(point.velocities.size(), 0);
+      point.accelerations.assign(point.accelerations.size(), 0);
     }
   }
 
   // Print a warning to the user if both are stale
-  if (!twist_command_is_stale_ || !joint_command_is_stale_)
+  if (twist_command_is_stale_ && joint_command_is_stale_)
   {
     ROS_WARN_STREAM_THROTTLE_NAMED(10, LOGNAME,
                                    "Stale command. "
@@ -580,7 +582,7 @@ bool ServoCalcs::convertDeltasToOutgoingCmd(trajectory_msgs::JointTrajectory& jo
 
   composeJointTrajMessage(internal_joint_state_, joint_trajectory);
 
-  if (!enforcePositionLimits())
+  if (!enforcePositionLimits(internal_joint_state_))
   {
     suddenHalt(joint_trajectory);
     status_ = StatusCode::JOINT_BOUND;
@@ -597,15 +599,15 @@ bool ServoCalcs::convertDeltasToOutgoingCmd(trajectory_msgs::JointTrajectory& jo
 
 // Spam several redundant points into the trajectory. The first few may be skipped if the
 // time stamp is in the past when it reaches the client. Needed for gazebo simulation.
-// Start from 2 because the first point's timestamp is already 1*parameters_.publish_period
 void ServoCalcs::insertRedundantPointsIntoTrajectory(trajectory_msgs::JointTrajectory& joint_trajectory, int count) const
 {
   joint_trajectory.points.resize(count);
   auto point = joint_trajectory.points[0];
-  // Start from 2 because we already have the first point. End at count+1 so (total #) == count
-  for (int i = 2; i < count; ++i)
+  // Start from 2nd point (i = 1) because we already have the first point.
+  // The timestamps are shifted up one period since first point is at 1 * publish_period, not 0.
+  for (int i = 1; i < count; ++i)
   {
-    point.time_from_start = ros::Duration(i * parameters_.publish_period);
+    point.time_from_start = ros::Duration((i + 1) * parameters_.publish_period);
     joint_trajectory.points[i] = point;
   }
 }
@@ -721,9 +723,8 @@ double ServoCalcs::velocityScalingFactorForSingularity(const Eigen::VectorXd& co
 
   Eigen::JacobiSVD<Eigen::MatrixXd> new_svd(new_jacobian);
   double new_condition = new_svd.singularValues()(0) / new_svd.singularValues()(new_svd.singularValues().size() - 1);
-  // If new_condition < ini_condition, the singular vector does point towards a
-  // singularity. Otherwise, flip its direction.
-  if (ini_condition >= new_condition)
+  // If new_condition < ini_condition, the singular vector points away from the singularity. If so, flip its direction.
+  if (new_condition < ini_condition)
   {
     vector_toward_singularity *= -1;
   }
@@ -779,7 +780,7 @@ void ServoCalcs::enforceVelLimits(Eigen::ArrayXd& delta_theta)
   delta_theta = velocity_scaling_factor * velocity * parameters_.publish_period;
 }
 
-bool ServoCalcs::enforcePositionLimits()
+bool ServoCalcs::enforcePositionLimits(sensor_msgs::JointState& joint_state)
 {
   bool halting = false;
 
@@ -797,14 +798,18 @@ bool ServoCalcs::enforcePositionLimits()
     }
     if (!current_state_->satisfiesPositionBounds(joint, -parameters_.joint_limit_margin))
     {
-      const std::vector<moveit_msgs::JointLimits> limits = joint->getVariableBoundsMsg();
+      const std::vector<moveit_msgs::JointLimits>& limits = joint->getVariableBoundsMsg();
 
       // Joint limits are not defined for some joints. Skip them.
       if (!limits.empty())
       {
-        if ((current_state_->getJointVelocities(joint)[0] < 0 &&
+        // Check if pending velocity command is moving in the right direction
+        auto joint_itr = std::find(joint_state.name.begin(), joint_state.name.end(), joint->getName());
+        auto joint_idx = std::distance(joint_state.name.begin(), joint_itr);
+
+        if ((joint_state.velocity.at(joint_idx) < 0 &&
              (joint_angle < (limits[0].min_position + parameters_.joint_limit_margin))) ||
-            (current_state_->getJointVelocities(joint)[0] > 0 &&
+            (joint_state.velocity.at(joint_idx) > 0 &&
              (joint_angle > (limits[0].max_position - parameters_.joint_limit_margin))))
         {
           ROS_WARN_STREAM_THROTTLE_NAMED(ROS_LOG_THROTTLE_PERIOD, LOGNAME,

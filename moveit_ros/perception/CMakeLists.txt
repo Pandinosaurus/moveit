@@ -1,17 +1,7 @@
-cmake_minimum_required(VERSION 3.1.3)
+cmake_minimum_required(VERSION 3.16)
 project(moveit_ros_perception)
 
-if(NOT "${CMAKE_CXX_STANDARD}")
-  set(CMAKE_CXX_STANDARD 14)
-endif()
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-
 option(WITH_OPENGL "Build the parts that depend on OpenGL" ON)
-
-if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Release)
-endif()
 
 find_package(Boost REQUIRED thread)
 
@@ -34,6 +24,7 @@ endif(APPLE)
 
 find_package(catkin REQUIRED COMPONENTS
   cv_bridge
+  geometric_shapes
   moveit_core
   roscpp
   rosconsole
@@ -52,6 +43,7 @@ find_package(catkin REQUIRED COMPONENTS
   moveit_ros_planning
   nodelet
 )
+moveit_build_options()
 
 find_package(Eigen3 REQUIRED)
 find_package(OpenMP REQUIRED)

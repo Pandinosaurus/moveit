@@ -42,7 +42,7 @@
 #include <geometric_shapes/check_isometry.h>
 #include <boost/math/constants/constants.hpp>
 #include <tf2_eigen/tf2_eigen.h>
-#include <boost/bind.hpp>
+#include <functional>
 #include <limits>
 #include <memory>
 
@@ -221,18 +221,18 @@ bool JointConstraint::configure(const moveit_msgs::JointConstraint& jc)
         joint_position_ = bounds.min_position_;
         joint_tolerance_above_ = std::numeric_limits<double>::epsilon();
         ROS_WARN_NAMED("kinematic_constraints",
-                       "Joint %s is constrained to be below the minimum bounds. "
+                       "Joint %s is constrained to be below the minimum bound %g. "
                        "Assuming minimum bounds instead.",
-                       jc.joint_name.c_str());
+                       jc.joint_name.c_str(), bounds.min_position_);
       }
       else if (bounds.max_position_ < joint_position_ - joint_tolerance_below_)
       {
         joint_position_ = bounds.max_position_;
         joint_tolerance_below_ = std::numeric_limits<double>::epsilon();
         ROS_WARN_NAMED("kinematic_constraints",
-                       "Joint %s is constrained to be above the maximum bounds. "
+                       "Joint %s is constrained to be above the maximum bounds %g. "
                        "Assuming maximum bounds instead.",
-                       jc.joint_name.c_str());
+                       jc.joint_name.c_str(), bounds.max_position_);
       }
     }
 
@@ -555,10 +555,11 @@ bool OrientationConstraint::configure(const moveit_msgs::OrientationConstraint& 
   // clearing out any old data
   clear();
 
-  link_model_ = robot_model_->getLinkModel(oc.link_name);
+  bool found;
+  link_model_ = robot_model_->getLinkModel(oc.link_name, &found);
   if (!link_model_)
   {
-    ROS_WARN_NAMED("kinematic_constraints", "Could not find link model for link name %s", oc.link_name.c_str());
+    ROS_WARN_NAMED("kinematic_constraints", "Could not find link model for link name '%s'", oc.link_name.c_str());
     return false;
   }
   Eigen::Quaterniond q;
@@ -576,6 +577,7 @@ bool OrientationConstraint::configure(const moveit_msgs::OrientationConstraint& 
     ROS_WARN_NAMED("kinematic_constraints", "No frame specified for position constraint on link '%s'!",
                    oc.link_name.c_str());
 
+  desired_R_in_frame_id_ = Eigen::Quaterniond(q);  // desired rotation wrt. frame_id
   if (tf.isFixedFrame(oc.header.frame_id))
   {
     tf.transformQuaternion(oc.header.frame_id, q, q);
@@ -603,7 +605,20 @@ bool OrientationConstraint::configure(const moveit_msgs::OrientationConstraint& 
     constraint_weight_ = 1.0;
   }
   else
+  {
     constraint_weight_ = oc.weight;
+  }
+
+  parameterization_type_ = oc.parameterization;
+  // validate the parameterization, set to default value if invalid
+  if (parameterization_type_ != moveit_msgs::OrientationConstraint::XYZ_EULER_ANGLES &&
+      parameterization_type_ != moveit_msgs::OrientationConstraint::ROTATION_VECTOR)
+  {
+    ROS_WARN_NAMED("kinematic_constraints",
+                   "Unknown parameterization for orientation constraint tolerance, using default (XYZ_EULER_ANGLES).");
+    parameterization_type_ = moveit_msgs::OrientationConstraint::XYZ_EULER_ANGLES;
+  }
+
   absolute_x_axis_tolerance_ = fabs(oc.absolute_x_axis_tolerance);
   if (absolute_x_axis_tolerance_ < std::numeric_limits<double>::epsilon())
     ROS_WARN_NAMED("kinematic_constraints", "Near-zero value for absolute_x_axis_tolerance");
@@ -655,44 +670,60 @@ ConstraintEvaluationResult OrientationConstraint::decide(const moveit::core::Rob
   if (!link_model_)
     return ConstraintEvaluationResult(true, 0.0);
 
-  std::tuple<Eigen::Vector3d, bool> euler_angles_error;
+  Eigen::Isometry3d diff;
   if (mobile_frame_)
   {
     // getFrameTransform() returns a valid isometry by contract
     Eigen::Matrix3d tmp = state.getFrameTransform(desired_rotation_frame_id_).linear() * desired_rotation_matrix_;
     // getGlobalLinkTransform() returns a valid isometry by contract
-    Eigen::Isometry3d diff(tmp.transpose() * state.getGlobalLinkTransform(link_model_).linear());  // valid isometry
-    euler_angles_error = CalcEulerAngles(diff.linear());
+    diff = Eigen::Isometry3d(tmp.transpose() * state.getGlobalLinkTransform(link_model_).linear());  // valid isometry
   }
   else
   {
     // diff is valid isometry by construction
-    Eigen::Isometry3d diff(desired_rotation_matrix_inv_ * state.getGlobalLinkTransform(link_model_).linear());
-    euler_angles_error = CalcEulerAngles(diff.linear());
+    diff = Eigen::Isometry3d(desired_rotation_matrix_inv_ * state.getGlobalLinkTransform(link_model_).linear());
   }
 
-  // Converting from a rotation matrix to an intrinsic XYZ euler angles have 2 singularities:
-  // pitch ~= pi/2 ==> roll + yaw = theta
-  // pitch ~= -pi/2 ==> roll - yaw = theta
-  // in those cases CalcEulerAngles will set roll (xyz(0)) to theta and yaw (xyz(2)) to zero, so for us to be able to
-  // capture yaw tolerance violation we do the following, if theta violate the absolute yaw tolerance we think of it as
-  // pure yaw rotation and set roll to zero
-  auto& xyz = std::get<Eigen::Vector3d>(euler_angles_error);
-  if (!std::get<bool>(euler_angles_error))
+  // This needs to live outside the if-block scope (as xyz_rotation points to its data).
+  std::tuple<Eigen::Vector3d, bool> euler_angles_error;
+  Eigen::Vector3d xyz_rotation;
+  if (parameterization_type_ == moveit_msgs::OrientationConstraint::XYZ_EULER_ANGLES)
   {
-    if (normalizeAbsoluteAngle(xyz(0)) > absolute_z_axis_tolerance_ + std::numeric_limits<double>::epsilon())
+    euler_angles_error = CalcEulerAngles(diff.linear());
+    // Converting from a rotation matrix to intrinsic XYZ Euler angles has 2 singularities:
+    // pitch ~= pi/2 ==> roll + yaw = theta
+    // pitch ~= -pi/2 ==> roll - yaw = theta
+    // in those cases CalcEulerAngles will set roll (xyz_rotation(0)) to theta and yaw (xyz_rotation(2)) to zero, so for
+    // us to be able to capture yaw tolerance violations we do the following: If theta violates the absolute yaw
+    // tolerance we think of it as a pure yaw rotation and set roll to zero.
+    xyz_rotation = std::get<Eigen::Vector3d>(euler_angles_error);
+    if (!std::get<bool>(euler_angles_error))
     {
-      xyz(2) = xyz(0);
-      xyz(0) = 0;
+      if (normalizeAbsoluteAngle(xyz_rotation(0)) > absolute_z_axis_tolerance_ + std::numeric_limits<double>::epsilon())
+      {
+        xyz_rotation(2) = xyz_rotation(0);
+        xyz_rotation(0) = 0;
+      }
     }
+    // Account for angle wrapping
+    xyz_rotation = xyz_rotation.unaryExpr(&normalizeAbsoluteAngle);
   }
-  // Account for angle wrapping
-  xyz = xyz.unaryExpr(&normalizeAbsoluteAngle);
+  else if (parameterization_type_ == moveit_msgs::OrientationConstraint::ROTATION_VECTOR)
+  {
+    Eigen::AngleAxisd aa(diff.linear());
+    // transform rotation vector from target frame to frame_id and take absolute values
+    xyz_rotation = (desired_R_in_frame_id_ * (aa.axis() * aa.angle())).cwiseAbs();
+  }
+  else
+  {
+    /* The parameterization type should be validated in configure, so this should never happen. */
+    ROS_ERROR_STREAM_NAMED("kinematic_constraints",
+                           "The parameterization type for the orientation constraints is invalid.");
+  }
 
-  // 0,1,2 corresponds to XYZ, the convention used in sampling constraints
-  bool result = xyz(2) < absolute_z_axis_tolerance_ + std::numeric_limits<double>::epsilon() &&
-                xyz(1) < absolute_y_axis_tolerance_ + std::numeric_limits<double>::epsilon() &&
-                xyz(0) < absolute_x_axis_tolerance_ + std::numeric_limits<double>::epsilon();
+  bool result = xyz_rotation(2) < absolute_z_axis_tolerance_ + std::numeric_limits<double>::epsilon() &&
+                xyz_rotation(1) < absolute_y_axis_tolerance_ + std::numeric_limits<double>::epsilon() &&
+                xyz_rotation(0) < absolute_x_axis_tolerance_ + std::numeric_limits<double>::epsilon();
 
   if (verbose)
   {
@@ -702,11 +733,11 @@ ConstraintEvaluationResult OrientationConstraint::decide(const moveit::core::Rob
                    "Orientation constraint %s for link '%s'. Quaternion desired: %f %f %f %f, quaternion "
                    "actual: %f %f %f %f, error: x=%f, y=%f, z=%f, tolerance: x=%f, y=%f, z=%f",
                    result ? "satisfied" : "violated", link_model_->getName().c_str(), q_des.x(), q_des.y(), q_des.z(),
-                   q_des.w(), q_act.x(), q_act.y(), q_act.z(), q_act.w(), xyz(0), xyz(1), xyz(2),
-                   absolute_x_axis_tolerance_, absolute_y_axis_tolerance_, absolute_z_axis_tolerance_);
+                   q_des.w(), q_act.x(), q_act.y(), q_act.z(), q_act.w(), xyz_rotation(0), xyz_rotation(1),
+                   xyz_rotation(2), absolute_x_axis_tolerance_, absolute_y_axis_tolerance_, absolute_z_axis_tolerance_);
   }
 
-  return ConstraintEvaluationResult(result, constraint_weight_ * (xyz(0) + xyz(1) + xyz(2)));
+  return ConstraintEvaluationResult(result, constraint_weight_ * (xyz_rotation(0) + xyz_rotation(1) + xyz_rotation(2)));
 }
 
 void OrientationConstraint::print(std::ostream& out) const
@@ -870,7 +901,7 @@ shapes::Mesh* VisibilityConstraint::getVisibilityCone(const moveit::core::RobotS
   std::unique_ptr<EigenSTL::vector_Vector3d> temp_points;
   if (mobile_target_frame_)
   {
-    temp_points.reset(new EigenSTL::vector_Vector3d(points_.size()));
+    temp_points = std::make_unique<EigenSTL::vector_Vector3d>(points_.size());
     for (std::size_t i = 0; i < points_.size(); ++i)
       temp_points->at(i) = tp * points_[i];
     points = temp_points.get();
@@ -1081,7 +1112,7 @@ ConstraintEvaluationResult VisibilityConstraint::decide(const moveit::core::Robo
   collision_detection::CollisionRequest req;
   collision_detection::CollisionResult res;
   collision_detection::AllowedCollisionMatrix acm;
-  acm.setDefaultEntry("cone", boost::bind(&VisibilityConstraint::decideContact, this, _1));
+  acm.setDefaultEntry("cone", [this](collision_detection::Contact& contact) { return decideContact(contact); });
   req.contacts = true;
   req.verbose = verbose;
   req.max_contacts = 1;

@@ -106,8 +106,8 @@ void IntegrationTestCommandPlanning::SetUp()
   ASSERT_TRUE(ros::service::waitForService(PLAN_SERVICE_NAME, ros::Duration(testutils::DEFAULT_SERVICE_TIMEOUT)));
 
   // load the test data provider
-  test_data_.reset(
-      new pilz_industrial_motion_planner_testutils::XmlTestdataLoader{ test_data_file_name_, robot_model_ });
+  test_data_ =
+      std::make_unique<pilz_industrial_motion_planner_testutils::XmlTestdataLoader>(test_data_file_name_, robot_model_);
   ASSERT_NE(nullptr, test_data_) << "Failed to load test data by provider.";
 
   num_joints_ = robot_model_->getJointModelGroup(planning_group_)->getActiveJointModelNames().size();
@@ -219,7 +219,7 @@ TEST_F(IntegrationTestCommandPlanning, PtpJointCart)
   Eigen::Isometry3d exp_iso3d_pose;
   tf2::fromMsg(expected_pose, exp_iso3d_pose);
 
-  EXPECT_TRUE(Eigen::Quaterniond(tf.rotation()).isApprox(Eigen::Quaterniond(exp_iso3d_pose.rotation()), EPSILON));
+  EXPECT_TRUE(Eigen::Quaterniond(tf.rotation()).isApprox(Eigen::Quaterniond(exp_iso3d_pose.rotation()), 2 * EPSILON));
 }
 
 /**

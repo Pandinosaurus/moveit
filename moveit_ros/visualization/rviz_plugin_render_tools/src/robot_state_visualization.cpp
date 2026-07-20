@@ -55,7 +55,7 @@ RobotStateVisualization::RobotStateVisualization(Ogre::SceneNode* root_node, rvi
   default_attached_object_color_.g = 0.7f;
   default_attached_object_color_.b = 0.0f;
   default_attached_object_color_.a = 1.0f;
-  render_shapes_.reset(new RenderShapes(context));
+  render_shapes_ = std::make_shared<RenderShapes>(context);
 }
 
 void RobotStateVisualization::load(const urdf::ModelInterface& descr, bool visual, bool collision)
@@ -121,11 +121,9 @@ void RobotStateVisualization::updateHelper(const moveit::core::RobotStateConstPt
     {
       std::map<std::string, std_msgs::ColorRGBA>::const_iterator it = color_map->find(attached_body->getName());
       if (it != color_map->end())
-      {  // render attached bodies with a color that is a bit different
-        color.r = std::max(1.0f, it->second.r * 1.05f);
-        color.g = std::max(1.0f, it->second.g * 1.05f);
-        color.b = std::max(1.0f, it->second.b * 1.05f);
-        alpha = color.a = it->second.a;
+      {
+        color = it->second;
+        alpha = color.a;
       }
     }
     rviz::RobotLink* link = robot_.getLink(attached_body->getAttachedLinkName());
@@ -135,7 +133,7 @@ void RobotStateVisualization::updateHelper(const moveit::core::RobotStateConstPt
       continue;
     }
     rviz::Color rcolor(color.r, color.g, color.b);
-    const EigenSTL::vector_Isometry3d& ab_t = attached_body->getFixedTransforms();
+    const EigenSTL::vector_Isometry3d& ab_t = attached_body->getShapePosesInLinkFrame();
     const std::vector<shapes::ShapeConstPtr>& ab_shapes = attached_body->getShapes();
     for (std::size_t j = 0; j < ab_shapes.size(); ++j)
     {

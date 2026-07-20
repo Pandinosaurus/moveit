@@ -42,6 +42,7 @@
 #include <QApplication>
 #include <QComboBox>
 #include <QDoubleValidator>
+#include <QFontMetrics>
 #include <QFormLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -75,8 +76,8 @@ RobotPosesWidget::RobotPosesWidget(QWidget* parent, const MoveItConfigDataPtr& c
   HeaderWidget* header =
       new HeaderWidget("Define Robot Poses",
                        "Create poses for the robot. Poses are defined as sets of joint values for "
-                       "particular planning groups. This is useful for things like <i>home position</i>."
-                       "The first pose for each robot will be its initial pose in simulation.",
+                       "particular planning groups. This is useful for things like <i>home position</i>. "
+                       "The <i>first</i> listed pose will be the robot's initial pose in simulation.",
                        this);
   layout->addWidget(header);
 
@@ -128,8 +129,8 @@ QWidget* RobotPosesWidget::createContentsWidget()
   data_table_->setColumnCount(2);
   data_table_->setSortingEnabled(true);
   data_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
-  connect(data_table_, SIGNAL(cellDoubleClicked(int, int)), this, SLOT(editDoubleClicked(int, int)));
-  connect(data_table_, SIGNAL(currentCellChanged(int, int, int, int)), this, SLOT(previewClicked(int, int, int, int)));
+  connect(data_table_, &QTableWidget::cellDoubleClicked, this, &RobotPosesWidget::editDoubleClicked);
+  connect(data_table_, &QTableWidget::currentCellChanged, this, &RobotPosesWidget::previewClicked);
   layout->addWidget(data_table_);
 
   // Set header labels
@@ -146,7 +147,7 @@ QWidget* RobotPosesWidget::createContentsWidget()
   QPushButton* btn_default = new QPushButton("&Show Default Pose", this);
   btn_default->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
   btn_default->setMaximumWidth(300);
-  connect(btn_default, SIGNAL(clicked()), this, SLOT(showDefaultPose()));
+  connect(btn_default, &QPushButton::clicked, this, &RobotPosesWidget::showDefaultPose);
   controls_layout->addWidget(btn_default);
   controls_layout->setAlignment(btn_default, Qt::AlignLeft);
 
@@ -154,7 +155,7 @@ QWidget* RobotPosesWidget::createContentsWidget()
   QPushButton* btn_play = new QPushButton("&MoveIt", this);
   btn_play->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
   btn_play->setMaximumWidth(300);
-  connect(btn_play, SIGNAL(clicked()), this, SLOT(playPoses()));
+  connect(btn_play, &QPushButton::clicked, this, &RobotPosesWidget::playPoses);
   controls_layout->addWidget(btn_play);
   controls_layout->setAlignment(btn_play, Qt::AlignLeft);
 
@@ -166,13 +167,13 @@ QWidget* RobotPosesWidget::createContentsWidget()
   btn_edit_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
   btn_edit_->setMaximumWidth(300);
   btn_edit_->hide();  // show once we know if there are existing poses
-  connect(btn_edit_, SIGNAL(clicked()), this, SLOT(editSelected()));
+  connect(btn_edit_, &QPushButton::clicked, this, &RobotPosesWidget::editSelected);
   controls_layout->addWidget(btn_edit_);
   controls_layout->setAlignment(btn_edit_, Qt::AlignRight);
 
   // Delete
   btn_delete_ = new QPushButton("&Delete Selected", this);
-  connect(btn_delete_, SIGNAL(clicked()), this, SLOT(deleteSelected()));
+  connect(btn_delete_, &QPushButton::clicked, this, &RobotPosesWidget::deleteSelected);
   controls_layout->addWidget(btn_delete_);
   controls_layout->setAlignment(btn_delete_, Qt::AlignRight);
 
@@ -180,7 +181,7 @@ QWidget* RobotPosesWidget::createContentsWidget()
   QPushButton* btn_add = new QPushButton("&Add Pose", this);
   btn_add->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
   btn_add->setMaximumWidth(300);
-  connect(btn_add, SIGNAL(clicked()), this, SLOT(showNewScreen()));
+  connect(btn_add, &QPushButton::clicked, this, &RobotPosesWidget::showNewScreen);
   controls_layout->addWidget(btn_add);
   controls_layout->setAlignment(btn_add, Qt::AlignRight);
 
@@ -225,7 +226,7 @@ QWidget* RobotPosesWidget::createEditWidget()
   group_name_field_ = new QComboBox(this);
   group_name_field_->setEditable(false);
   // Connect the signal for changes to the drop down box
-  connect(group_name_field_, SIGNAL(currentIndexChanged(const QString&)), this, SLOT(loadJointSliders(const QString&)));
+  connect(group_name_field_, &QComboBox::currentTextChanged, this, &RobotPosesWidget::loadJointSliders);
   // group_name_field_->setMaximumWidth( 300 );
   form_layout->addRow("Planning Group:", group_name_field_);
 
@@ -245,8 +246,8 @@ QWidget* RobotPosesWidget::createEditWidget()
 
   // Create scroll area
   scroll_area_ = new QScrollArea(this);
-  // scroll_area_->setBackgroundRole(QPalette::Dark);
   scroll_area_->setWidget(joint_list_widget_);
+  scroll_area_->setWidgetResizable(true);
 
   column2_->addWidget(scroll_area_);
 
@@ -266,14 +267,14 @@ QWidget* RobotPosesWidget::createEditWidget()
   // Save
   btn_save_ = new QPushButton("&Save", this);
   btn_save_->setMaximumWidth(200);
-  connect(btn_save_, SIGNAL(clicked()), this, SLOT(doneEditing()));
+  connect(btn_save_, &QPushButton::clicked, this, &RobotPosesWidget::doneEditing);
   controls_layout->addWidget(btn_save_);
   controls_layout->setAlignment(btn_save_, Qt::AlignRight);
 
   // Cancel
   btn_cancel_ = new QPushButton("&Cancel", this);
   btn_cancel_->setMaximumWidth(200);
-  connect(btn_cancel_, SIGNAL(clicked()), this, SLOT(cancelEditing()));
+  connect(btn_cancel_, &QPushButton::clicked, this, &RobotPosesWidget::cancelEditing);
   controls_layout->addWidget(btn_cancel_);
   controls_layout->setAlignment(btn_cancel_, Qt::AlignRight);
 
@@ -485,9 +486,7 @@ void RobotPosesWidget::loadJointSliders(const QString& selected)
   // Create layout again
   joint_list_layout_ = new QVBoxLayout();
   joint_list_widget_->setLayout(joint_list_layout_);
-  //  joint_list_widget_->setSizePolicy( QSizePolicy::Expanding, QSizePolicy::Expanding );
-  joint_list_widget_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
-  joint_list_widget_->setMinimumSize(50, 50);  // w, h
+  joint_list_widget_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
   // Get list of associated joints
   const moveit::core::JointModelGroup* joint_model_group =
@@ -495,7 +494,6 @@ void RobotPosesWidget::loadJointSliders(const QString& selected)
   const auto& robot_state = config_data_->getPlanningScene()->getCurrentState();
 
   // Iterate through the joints
-  int num_joints = 0;
   for (const moveit::core::JointModel* joint_model : joint_model_group->getJointModels())
   {
     if (joint_model->getVariableCount() != 1 ||  // only consider 1-variable joints
@@ -510,14 +508,8 @@ void RobotPosesWidget::loadJointSliders(const QString& selected)
     joint_list_layout_->addWidget(sw);
 
     // Connect value change event
-    connect(sw, SIGNAL(jointValueChanged(const std::string&, double)), this,
-            SLOT(updateRobotModel(const std::string&, double)));
-
-    ++num_joints;
+    connect(sw, &SliderWidget::jointValueChanged, this, &RobotPosesWidget::updateRobotModel);
   }
-
-  // Copy the width of column 2 and manually calculate height from number of joints
-  joint_list_widget_->resize(300, num_joints * 70);  // w, h
 
   // Update the robot model in Rviz with newly selected joint values
   publishJoints();
@@ -819,18 +811,19 @@ SliderWidget::SliderWidget(QWidget* parent, const moveit::core::JointModel* join
   joint_slider_->setContentsMargins(0, 0, 0, 0);
   row2->addWidget(joint_slider_);
 
+  QFontMetrics m{ QFont() };
   // Joint Value Box ------------------------------------------------
   joint_value_ = new QLineEdit(this);
-  joint_value_->setMaximumWidth(62);
+  joint_value_->setMaximumWidth(m.boundingRect("0000.00000").width());
   joint_value_->setContentsMargins(0, 0, 0, 0);
-  connect(joint_value_, SIGNAL(editingFinished()), this, SLOT(changeJointSlider()));
+  connect(joint_value_, &QLineEdit::editingFinished, this, &SliderWidget::changeJointSlider);
   row2->addWidget(joint_value_);
 
   // Joint Limits ----------------------------------------------------
   const std::vector<moveit_msgs::JointLimits>& limits = joint_model_->getVariableBoundsMsg();
   if (limits.empty())
   {
-    QMessageBox::critical(this, "Error Loading", "An internal error has occured while loading the joints");
+    QMessageBox::critical(this, "Error Loading", "An internal error has occurred while loading the joints");
     return;
   }
 
@@ -844,7 +837,7 @@ SliderWidget::SliderWidget(QWidget* parent, const moveit::core::JointModel* join
   joint_slider_->setMinimum(min_position_ * 10000);
 
   // Connect slider to joint value box
-  connect(joint_slider_, SIGNAL(valueChanged(int)), this, SLOT(changeJointValue(int)));
+  connect(joint_slider_, &QSlider::valueChanged, this, &SliderWidget::changeJointValue);
 
   // Initial joint values -------------------------------------------
   int value = init_value * 10000;           // scale double to integer for slider use

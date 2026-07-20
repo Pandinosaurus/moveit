@@ -39,6 +39,8 @@
 
 #include <moveit/macros/class_forward.h>
 #include <moveit/exceptions/exceptions.h>
+#include <moveit/utils/lexical_casts.h>
+
 #include <urdf/model.h>
 #include <srdfdom/model.h>
 
@@ -60,6 +62,15 @@ namespace moveit
 namespace core
 {
 MOVEIT_CLASS_FORWARD(RobotModel);  // Defines RobotModelPtr, ConstPtr, WeakPtr... etc
+
+static inline void checkInterpolationParamBounds(const char LOGNAME[], double t)
+{
+  if (std::isnan(t) || std::isinf(t))
+  {
+    throw Exception("Interpolation parameter is NaN or inf.");
+  }
+  ROS_WARN_STREAM_COND_NAMED(t < 0. || t > 1., LOGNAME, "Interpolation parameter is not in the range [0, 1]: " << t);
+}
 
 /** \brief Definition of a kinematic model. This class is not thread
     safe, however multiple instances can be created */
@@ -247,6 +258,9 @@ public:
 
   /** \brief Get the latest link upwards the kinematic tree, which is only connected via fixed joints
    *
+   * If jmg is given, all links that are not active in this JMG are considered fixed.
+   * Otherwise only fixed joints are considered fixed.
+   *
    * This is useful, if the link should be warped to a specific pose using updateStateWithLinkAt().
    * As updateStateWithLinkAt() warps only the specified link and its descendants, you might not
    * achieve what you expect, if link is an abstract frame name. Considering the following example:
@@ -256,7 +270,15 @@ public:
    * what you went for. Instead, updateStateWithLinkAt(getRigidlyConnectedParentLinkModel(grasp_frame), ...)
    * will actually warp wrist (and all its descendants).
    */
-  static const moveit::core::LinkModel* getRigidlyConnectedParentLinkModel(const LinkModel* link);
+  static const moveit::core::LinkModel* getRigidlyConnectedParentLinkModel(const LinkModel* link,
+                                                                           Eigen::Isometry3d& transform,
+                                                                           const JointModelGroup* jmg = nullptr);
+  static const moveit::core::LinkModel* getRigidlyConnectedParentLinkModel(const LinkModel* link,
+                                                                           const JointModelGroup* jmg = nullptr)
+  {
+    Eigen::Isometry3d unused;
+    return getRigidlyConnectedParentLinkModel(link, unused, jmg);
+  }
 
   /** \brief Get the array of links  */
   const std::vector<const LinkModel*>& getLinkModels() const
@@ -595,7 +617,7 @@ protected:
   void buildGroups(const srdf::Model& srdf_model);
 
   /** \brief Compute helpful information about groups (that can be queried later) */
-  void buildGroupsInfoSubgroups(const srdf::Model& srdf_model);
+  void buildGroupsInfoSubgroups();
 
   /** \brief Compute helpful information about groups (that can be queried later) */
   void buildGroupsInfoEndEffectors(const srdf::Model& srdf_model);

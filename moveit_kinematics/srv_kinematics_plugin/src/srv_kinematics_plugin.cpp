@@ -110,7 +110,7 @@ bool SrvKinematicsPlugin::initialize(const moveit::core::RobotModel& robot_model
   lookupParam("kinematics_solver_service_name", ik_service_name, std::string("solve_ik"));
 
   // Setup the joint state groups that we need
-  robot_state_.reset(new moveit::core::RobotState(robot_model_));
+  robot_state_ = std::make_shared<moveit::core::RobotState>(robot_model_);
   robot_state_->setToDefaultValues();
 
   // Create the ROS service client
@@ -324,7 +324,7 @@ bool SrvKinematicsPlugin::searchPositionIK(const std::vector<geometry_msgs::Pose
   if (!moveit::core::robotStateMsgToRobotState(ik_srv.response.solution, *robot_state_))
   {
     ROS_ERROR_STREAM_NAMED("srv",
-                           "An error occured converting received robot state message into internal robot state.");
+                           "An error occurred converting received robot state message into internal robot state.");
     error_code.val = error_code.FAILURE;
     return false;
   }

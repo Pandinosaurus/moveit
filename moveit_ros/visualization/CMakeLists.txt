@@ -1,25 +1,10 @@
-cmake_minimum_required(VERSION 3.1.3)
+cmake_minimum_required(VERSION 3.16)
 project(moveit_ros_visualization)
-
-if(NOT "${CMAKE_CXX_STANDARD}")
-  set(CMAKE_CXX_STANDARD 14)
-endif()
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-
-if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-  # suppress warning in Ogre
-  add_compile_options(-Wno-deprecated-register)
-endif()
 
 # definition needed for boost/math/constants/constants.hpp included by Ogre to compile
 add_definitions(-DBOOST_MATH_DISABLE_FLOAT128)
 
-if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Release)
-endif()
-
-find_package(Boost REQUIRED thread date_time system filesystem)
+find_package(Boost REQUIRED thread date_time filesystem)
 find_package(catkin REQUIRED COMPONENTS
   class_loader
   geometric_shapes
@@ -39,25 +24,27 @@ find_package(catkin REQUIRED COMPONENTS
   rosconsole
   object_recognition_msgs
 )
+moveit_build_options()
+
 # TODO: Remove when Kinetic support is dropped
-if(rviz_VERSION VERSION_LESS 1.13.1) # Does rviz supports TF2?
+if(rviz_VERSION VERSION_LESS 1.13.1) # Does rviz support TF2?
   add_definitions(-DRVIZ_TF1)
 endif()
 
 find_package(Eigen3 REQUIRED)
 
 # Qt Stuff
-if(rviz_QT_VERSION VERSION_LESS "5")
-  find_package(Qt4 ${rviz_QT_VERSION} REQUIRED QtCore QtGui)
-  include(${QT_USE_FILE})
-  macro(qt_wrap_ui)
-    qt4_wrap_ui(${ARGN})
-  endmacro()
-else()
+if(rviz_QT_VERSION VERSION_LESS "6")
   find_package(Qt5 ${rviz_QT_VERSION} REQUIRED Core Widgets)
   set(QT_LIBRARIES Qt5::Widgets)
   macro(qt_wrap_ui)
     qt5_wrap_ui(${ARGN})
+  endmacro()
+else()
+  find_package(Qt6 ${rviz_QT_VERSION} REQUIRED Core Widgets)
+  set(QT_LIBRARIES Qt6::Widgets)
+  macro(qt_wrap_ui)
+    qt6_wrap_ui(${ARGN})
   endmacro()
 endif()
 

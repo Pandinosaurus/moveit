@@ -39,9 +39,8 @@
 
 #include <QItemSelection>
 #include <QPainter>
+#include <QtCore/QRegularExpression>
 #include <cmath>
-
-using namespace moveit_setup_assistant;
 
 CollisionLinearModel::CollisionLinearModel(CollisionMatrixModel* src, QObject* parent) : QAbstractProxyModel(parent)
 {
@@ -127,22 +126,17 @@ QVariant CollisionLinearModel::data(const QModelIndex& index, int role) const
   return QVariant();
 }
 
-DisabledReason CollisionLinearModel::reason(int row) const
-{
-  QModelIndex src_index = this->mapToSource(index(row, 0));
-  return qobject_cast<CollisionMatrixModel*>(sourceModel())->reason(src_index);
-}
-
 bool CollisionLinearModel::setData(const QModelIndex& index, const QVariant& value, int role)
 {
-  QModelIndex src_index = this->mapToSource(index);
-
   if (role == Qt::CheckStateRole)
   {
-    sourceModel()->setData(src_index, value, role);
-    int r = index.row();
-    Q_EMIT dataChanged(this->index(r, 2), this->index(r, 3));  // reason changed too
-    return true;
+    QModelIndex src_index = this->mapToSource(index);
+    if (sourceModel()->setData(src_index, value, role))
+    {
+      int r = index.row();
+      Q_EMIT dataChanged(this->index(r, 2), this->index(r, 3));  // reason changed too
+      return true;
+    }
   }
   return false;  // reject all other changes
 }
@@ -239,13 +233,17 @@ void SortFilterProxyModel::setShowAll(bool show_all)
 bool SortFilterProxyModel::filterAcceptsRow(int source_row, const QModelIndex& source_parent) const
 {
   CollisionLinearModel* m = qobject_cast<CollisionLinearModel*>(sourceModel());
-  if (!(show_all_ || m->reason(source_row) <= moveit_setup_assistant::ALWAYS ||
-        m->data(m->index(source_row, 2), Qt::CheckStateRole) == Qt::Checked))
+  if (!(show_all_ || m->data(m->index(source_row, 2), Qt::CheckStateRole) == Qt::Checked))
     return false;  // not accepted due to check state
-
+#if (QT_VERSION < QT_VERSION_CHECK(5, 12, 0))
   const QRegExp regexp = this->filterRegExp();
   if (regexp.isEmpty())
     return true;
+#else
+  const QRegularExpression regexp = this->filterRegularExpression();
+  if (!regexp.isValid())
+    return true;
+#endif
 
   return m->data(m->index(source_row, 0, source_parent), Qt::DisplayRole).toString().contains(regexp) ||
          m->data(m->index(source_row, 1, source_parent), Qt::DisplayRole).toString().contains(regexp);
@@ -281,7 +279,20 @@ bool SortFilterProxyModel::lessThan(const QModelIndex& src_left, const QModelInd
     if (value_left == value_right)
       continue;
 
-    bool smaller = (value_left < value_right);
+    bool smaller{};
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+    switch (value_left.type())
+#else
+    switch (value_left.typeId())
+#endif
+    {
+      case QVariant::Int:
+        smaller = value_left.toInt() < value_right.toInt();
+        break;
+      default:
+        smaller = value_left.toString() < value_right.toString();
+        break;
+    }
     if (sort_orders_[i] == Qt::DescendingOrder)
       smaller = !smaller;
     return smaller;

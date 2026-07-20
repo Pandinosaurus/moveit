@@ -50,6 +50,7 @@ import numpy as np
 from math import floor
 from optparse import OptionParser, OptionGroup
 
+
 # Given a text line, split it into tokens (by space) and return the token
 # at the desired index. Additionally, test that some expected tokens exist.
 # Return None if they do not.
@@ -112,13 +113,15 @@ def readRequiredMultilineValue(filevar):
 def readBenchmarkLog(dbname, filenames):
     """Parse benchmark log files and store the parsed data in a sqlite3 database."""
 
+    def isInvalidValue(value):
+        return len(value) == 0 or value in ["nan", "-nan", "inf", "-inf"]
+
     conn = sqlite3.connect(dbname)
     c = conn.cursor()
     c.execute("PRAGMA FOREIGN_KEYS = ON")
 
     # create all tables if they don't already exist
-    c.executescript(
-        """CREATE TABLE IF NOT EXISTS experiments
+    c.executescript("""CREATE TABLE IF NOT EXISTS experiments
         (id INTEGER PRIMARY KEY ON CONFLICT REPLACE AUTOINCREMENT, name VARCHAR(512),
         totaltime REAL, timelimit REAL, memorylimit REAL, runcount INTEGER,
         version VARCHAR(128), hostname VARCHAR(1024), cpuinfo TEXT,
@@ -135,8 +138,7 @@ def readBenchmarkLog(dbname, filenames):
         FOREIGN KEY (plannerid) REFERENCES plannerConfigs(id) ON DELETE CASCADE);
         CREATE TABLE IF NOT EXISTS progress
         (runid INTEGER, time REAL, PRIMARY KEY (runid, time),
-        FOREIGN KEY (runid) REFERENCES runs(id) ON DELETE CASCADE)"""
-    )
+        FOREIGN KEY (runid) REFERENCES runs(id) ON DELETE CASCADE)""")
 
     # add placeholder entry for all_experiments
     allExperimentsName = "all_experiments"
@@ -313,7 +315,7 @@ def readBenchmarkLog(dbname, filenames):
             runIds = []
             for j in range(numRuns):
                 runValues = [
-                    None if len(x) == 0 or x == "nan" or x == "inf" else x
+                    None if isInvalidValue(x) else x
                     for x in logfile.readline().split("; ")[:-1]
                 ]
                 values = tuple([experimentId, plannerId] + runValues)
@@ -362,7 +364,7 @@ def readBenchmarkLog(dbname, filenames):
                         values = tuple(
                             [runIds[j]]
                             + [
-                                None if len(x) == 0 or x == "nan" or x == "inf" else x
+                                None if isInvalidValue(x) else x
                                 for x in dataSample.split(",")[:-1]
                             ]
                         )
@@ -518,12 +520,9 @@ def plotProgressAttribute(cur, planners, attribute):
     ax.set_ylabel(attribute.replace("_", " "))
     plannerNames = []
     for planner in planners:
-        cur.execute(
-            """SELECT count(progress.%s) FROM progress INNER JOIN runs
+        cur.execute("""SELECT count(progress.%s) FROM progress INNER JOIN runs
             ON progress.runid = runs.id AND runs.plannerid=%s
-            AND progress.%s IS NOT NULL"""
-            % (attribute, planner[0], attribute)
-        )
+            AND progress.%s IS NOT NULL""" % (attribute, planner[0], attribute))
         if cur.fetchone()[0] > 0:
             plannerNames.append(planner[1])
             cur.execute(
@@ -540,7 +539,7 @@ def plotProgressAttribute(cur, planners, attribute):
                     "SELECT time, %s FROM progress WHERE runid = %s ORDER BY time"
                     % (attribute, r)
                 )
-                (time, data) = zip(*(cur.fetchall()))
+                time, data = zip(*(cur.fetchall()))
                 timeTable.append(time)
                 dataTable.append(data)
             # It's conceivable that the sampling process may have
@@ -605,11 +604,8 @@ def plotStatistics(dbname, fname):
     c.execute("""SELECT id, name, timelimit, memorylimit FROM experiments""")
     experiments = c.fetchall()
     for experiment in experiments:
-        c.execute(
-            """SELECT count(*) FROM runs WHERE runs.experimentid = %d
-            GROUP BY runs.plannerid"""
-            % experiment[0]
-        )
+        c.execute("""SELECT count(*) FROM runs WHERE runs.experimentid = %d
+            GROUP BY runs.plannerid""" % experiment[0])
         numRuns = [run[0] for run in c.fetchall()]
         numRuns = numRuns[0] if len(set(numRuns)) == 1 else ",".join(numRuns)
 
@@ -766,7 +762,7 @@ if __name__ == "__main__":
         default=None,
         help="Save SQLite3 database as a MySQL dump file",
     )
-    (options, args) = parser.parse_args()
+    options, args = parser.parse_args()
 
     if len(args) == 0:
         parser.error("No arguments were provided. Please provide full path of log file")
